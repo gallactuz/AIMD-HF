@@ -18,7 +18,7 @@
 //     F → Red force arrows on each atom (3D)
 //
 // Compile:
-//   Linux : g++ aimd_hf_heh_multi.cpp -o aimd_hf -lGL -lGLU -lglut -lm -lpthread
+//   Linux : g++ aimd_hf.cpp -o aimd_hf -lGL -lGLU -lglut -lm -lpthread
 //
 // Controls:
 //   W/S : zoom in/out       A/D : camera left/right
