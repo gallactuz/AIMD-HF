@@ -1,15 +1,14 @@
-AIMD-HF
-Educational Ab Initio Molecular Dynamics with Restricted Hartree–Fock / STO-3G
+AIMD-HF: A Minimal, Transparent, and Interactive Educational Implementation of Hartree–Fock Ab Initio Molecular Dynamics
 
-Anderson Aparecido do Espirito Santo¹
-Marcos Henrique de Paula Dias da Silva²
-
-¹ Independent Researcher, Araraquara – SP, Brazil
-² Instituto Federal do Rio de Janeiro (IFRJ), Brazil
+Authors:
+Anderson Aparecido do Espirito Santo
+Marcos Henrique de Paula Dias da Silva (IFRJ)
 
 Abstract
 
 This repository contains a fully self-contained, educational implementation of real-time Ab Initio Molecular Dynamics (AIMD) using the Restricted Hartree–Fock (RHF) method with the minimal STO-3G basis set.
+
+The simulator supports multiple atomic systems, including hydrogen clusters (Hₙ), helium atoms (Heₙ), and protonated helium hydride systems (HeH⁺), enabling the exploration of both neutral and charged quantum systems.
 
 The code strongly prioritizes conceptual clarity and pedagogical value over computational performance. Every fundamental step of quantum chemistry and molecular simulation is implemented explicitly and clearly commented in a single C++ file.
 
@@ -19,18 +18,24 @@ AIMD-HF is an interactive educational simulator that couples a full quantum-mech
 
 Unlike conventional molecular dynamics packages that rely on pre-fitted force fields, this program computes the energy and forces on-the-fly by solving the electronic Schrödinger equation approximately via the Hartree–Fock method at every molecular dynamics step.
 
-This allows users to directly visualize the intimate relationship between electronic structure and atomic dynamics.
+This allows users to directly visualize the relationship between electronic structure and atomic dynamics.
+
+The inclusion of helium and HeH⁺ systems enables exploration of weak interactions, charge asymmetry, and thermally driven dissociation processes.
 
 Key Features
+Multi-system support:
+Hydrogen clusters (Hₙ)
+Helium atoms (Heₙ)
+Protonated helium hydride systems (HeH⁺)
 Complete Restricted Hartree–Fock (RHF) implementation with STO-3G basis set
 Explicit evaluation of all one- and two-electron integrals:
-Overlap
-Kinetic energy
-Nuclear attraction
-Electron repulsion
+Overlap (S)
+Kinetic energy (T)
+Nuclear attraction (Vₙₑ)
+Electron repulsion integrals (ERI)
 Self-Consistent Field (SCF) procedure with adaptive damping and Jacobi diagonalization
 Nuclear forces computed via central finite differences
-Velocity Verlet integrator (BAOAB splitting)
+Velocity Verlet integrator
 Langevin thermostat (friction + stochastic noise)
 Berendsen barostat for pressure control
 Reflective (elastic) boundary conditions in a cubic simulation box
@@ -38,83 +43,102 @@ Real-time 3D visualization using OpenGL and GLUT
 Dynamic chemical bond visualization (yellow cylinders)
 Real-time rolling graph of Hartree–Fock energy
 Heads-Up Display (HUD) with physical observables
-Interactive Educational Panels (v1.1)
-[O] Molecular Orbital Diagram
-Energies, occupancy, spin arrows, HOMO/LUMO
+Interactive Educational Panels (no extra SCF cost):
+[O] Molecular Orbitals (HOMO/LUMO)
 [M] Mulliken Population Analysis
-Gross population and atomic charges
-[E] Energy Decomposition
-T + V_ne + V_ee + V_nn with visual bars
-[F] Force Visualization
-Real-time quantum force vectors (red 3D arrows)
-Architecture
-Multi-threaded design (quantum calculations run in background thread)
-Mutex-protected render buffers for smooth visualization
-Compilation (Linux)
+[E] Energy Decomposition (T + Vₙₑ + Vₑₑ + Vₙₙ)
+[F] Quantum force vectors
+Multi-threaded design (quantum calculations in background thread)
+Mutex-protected rendering buffers
+Installation and Compilation
+Linux
+
+Debian/Ubuntu:
+
+sudo apt update
+sudo apt install build-essential freeglut3-dev libglu1-mesa-dev
+
+Fedora:
+
+sudo dnf install gcc-c++ freeglut-devel mesa-libGLU-devel
+
+Compile:
 
 g++ aimd_hf.cpp -o aimd_hf -lGL -lGLU -lglut -lm -lpthread -O2
 
-Execution
+Run:
 
-./aimd_hf [N]
+./aimd_hf
+Windows (MSYS2 recommended)
 
-N = number of hydrogen atoms
-Must be even (closed-shell RHF)
-Default: 2
+Step 1 – Install MSYS2
+https://www.msys2.org
+
+Step 2 – Install dependencies:
+
+pacman -S mingw-w64-x86_64-gcc
+pacman -S mingw-w64-x86_64-freeglut
+
+Step 3 – Compile:
+
+g++ aimd_hf.cpp -o aimd_hf.exe -lfreeglut -lopengl32 -lglu32 -O2
+
+Step 4 – Run:
+
+./aimd_hf.exe
+Execution Parameters
+./aimd_hf h
+./aimd_hf h N
+./aimd_hf he
+./aimd_hf he N
+./aimd_hf heh+
+./aimd_hf heh+ N
+
+Notes:
+
+N = number of atoms or pairs
+Default system is H₂
+For hydrogen systems (Hₙ), N must be even (closed-shell RHF)
+Charged systems (HeH⁺) are supported
+Electron count is automatically adjusted
 Keyboard Controls
 Key	Action
-W / S	Zoom in / out
-A / D	Move left / right
-Z / X	Move up / down
-/ - | Increase / decrease temperature (±50 K)
-O | Toggle Molecular Orbital Diagram
-M | Toggle Mulliken Analysis
-E | Toggle Energy Decomposition
-F | Toggle Force Arrows
-ESC | Exit
+W / S	Zoom
+A / D	Move left/right
+Z / X	Move up/down
++ / -	Temperature
+O	Orbitals
+M	Mulliken
+E	Energy decomposition
+F	Forces
+ESC	Exit
 Educational Value
 
 This project was designed as a teaching tool for quantum chemistry and molecular simulation. Users can explore:
 
-SCF convergence during real-time MD
+SCF convergence during real-time dynamics
 Coupling between electronic structure and nuclear motion
-Temperature effects on geometry and electronic properties
-Mulliken charge fluctuations
-HOMO–LUMO gap evolution
-Real quantum forces (visualized in real time)
-Energy decomposition contributions:
-Kinetic
-Nuclear attraction
-Electron-electron repulsion
-Nuclear repulsion
-Effects of numerical approximations in quantum chemistry
+Temperature effects on molecular behavior
+Charge redistribution (Mulliken populations)
+HOMO–LUMO evolution
+Energy component contributions
+Quantum mechanical forces
+Supported Systems and Physics
+Hₙ: covalent bonding and many-body effects
+Heₙ: weak interactions (no true bonding in RHF/STO-3G)
+HeH⁺: ionic bonding and charge asymmetry
 Design Philosophy
 Clarity over performance
-Explicit implementation of all core algorithms
-Clear comments for every major step:
-Integrals
-SCF
-Forces
-MD
-Minimal dependencies (only OpenGL/GLUT)
+Explicit implementation of all algorithms
+Minimal dependencies
 Strong pedagogical focus
-Ideal for understanding what happens "under the hood"
 Limitations
-O(N^4) scaling due to explicit computation of two-electron integrals
-Numerical force calculation (6N + 1 SCF per step)
-Practical limit: ~12 hydrogen atoms
-STO-3G is a minimal basis set (qualitative results only)
-Not suitable for production simulations
-License
+O(N⁴) scaling
+Numerical forces (finite differences)
+Limited to small systems (~12 atoms)
+Minimal basis (STO-3G)
+Only H and He supported
+Supporting Information
 
-This project is released under the MIT License.
-
-You are free to use, modify, and distribute this code (including commercially), provided that the original copyright notice is included.
-
-Authors
-
-Anderson Aparecido do Espirito Santo
-Independent Researcher, Araraquara – SP, Brazil
-
-Marcos Henrique de Paula Dias da Silva
-Instituto Federal do Rio de Janeiro (IFRJ), Brazil
+Source code:
+https://github.com/gallactuz/AIMD-HF
