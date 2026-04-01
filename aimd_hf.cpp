@@ -5,7 +5,7 @@
 // Real-time visualization with OpenGL
 //
 // Author  : Anderson Aparecido do Espirito Santo
-// Version : 1.3 — Multi-HeH+ & He_n Support
+// Version : 1.0 — Multi H_n & HeH+ & He_n Support
 // Date    : 2026
 //
 // Description:
