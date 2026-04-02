@@ -1,15 +1,13 @@
 # AIMD-HF
+An interactive, real-time Hartree–Fock molecular dynamics simulator designed for teaching and intuition.
 
 > 📄 **Full Documentation Available**
 >
 > For a complete and well-formatted version of this project (including detailed explanations, figures, and structured layout), please refer to the PDF:
 >
 > 👉 **[Read the full README (PDF)](./readme.pdf)**
->
-> The PDF version is recommended for the best reading experience.
 
----
-
+--- 
 ## Overview
 
 This is an **educational simulator of *ab initio* Molecular Dynamics** using the Hartree–Fock method with the STO-3G basis set.
