@@ -1,5 +1,5 @@
 # AIMD-HF
-An interactive, real-time Hartree–Fock molecular dynamics simulator designed for teaching and intuition.
+An interactive, real-time Hartree–Fock molecular dynamics simulator designed for teaching and conceptual understanding.
 
 > 📄 **Full Documentation Available**
 >
