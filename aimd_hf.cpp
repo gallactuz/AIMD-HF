@@ -1,11 +1,9 @@
-
 // ============================================================
 // Ab initio Molecular Dynamics (AIMD)
 // Method: Hartree-Fock (RHF) / STO-3G basis set
 // Real-time visualization with OpenGL
 //
 // Author  : Anderson Aparecido do Espirito Santo
-// Version : 1.0 — Multi H_n & HeH+_n & He_n Support
 // Date    : 2026
 //
 // Description:
@@ -16,6 +14,7 @@
 //     M → Mulliken population analysis (gross pop + net charge)
 //     E → Energy decomposition (T + V_ne + V_ee + V_nn)
 //     F → Red force arrows on each atom (3D)
+//     V → 3D semi-transparent orbital volume cloud (new)
 //
 // Compile:
 //   Linux : g++ aimd_hf.cpp -o aimd_hf -lGL -lGLU -lglut -lm -lpthread
@@ -25,6 +24,7 @@
 //   Z/X : camera up/down    +/- : temperature ±50 K
 //   O   : orbital diagram   M   : Mulliken populations
 //   E   : energy decomp     F   : force arrows
+//   V   : 3D orbital volume (semi-transparent MO lobes)
 //   ESC : exit
 //
 // Usage:
@@ -62,8 +62,8 @@ int NUM_ELECTRONS = 2;    // Total number of electrons (must be even for closed-
 static int molecule_type = 0;    // Default: hydrogen system
 static int N_heh_pairs   = 1;    // Number of HeH+ pairs (only relevant when molecule_type == 1)
 
-static int    g_Z[MAX_ATOM];           // Nuclear charge (atomic number) for each atom
-static double g_a_exp[MAX_ATOM][NP];   // STO-3G Gaussian exponents for each atom's basis functions
+static int    g_Z[MAX_ATOM];              // Nuclear charge (atomic number) for each atom
+static double g_a_exp[MAX_ATOM][NP];      // STO-3G Gaussian exponents for each atom's basis functions
 static char   g_atom_symbol[MAX_ATOM][4]; // Chemical symbol string for each atom (e.g., "H", "He")
 
 // STO-3G contraction coefficients (same for all atoms in minimal basis)
@@ -85,11 +85,11 @@ static float target_pressure = 0.001f; // Target pressure for the Berendsen baro
 
 // ====================== ATOM STRUCTURE ======================
 struct Atom {
-    float x, y, z;           // Current position (bohr)
+    float x, y, z;               // Current position (bohr)
     float vx_old, vy_old, vz_old; // Velocity at the previous half-step (Velocity Verlet)
-    float vx, vy, vz;        // Current full-step velocity (informational)
-    float ax, ay, az;        // Current acceleration = Force / mass (bohr/a.u.²)
-    float mass, radius;      // Atomic mass (a.u.) and visual sphere radius
+    float vx, vy, vz;            // Current full-step velocity (informational)
+    float ax, ay, az;            // Current acceleration = Force / mass (bohr/a.u.²)
+    float mass, radius;          // Atomic mass (a.u.) and visual sphere radius
 };
 
 // ====================== PHYSICS-SIDE BUFFERS ======================
@@ -104,9 +104,9 @@ static int    history_count = 0;        // Total number of energy entries record
 static int    md_step       = 0;        // Current MD step counter
 
 // Arrays filled during SCF analysis (populated when do_analysis == 1)
-static double g_orbital_eps[MAX_BASIS];          // MO orbital energies (Hartree)
-static double g_mo_coeff[MAX_BASIS][MAX_BASIS];  // MO coefficient matrix C (AO → MO)
-static double g_mulliken_q[MAX_ATOM];            // Mulliken net atomic charges
+static double g_orbital_eps[MAX_BASIS];         // MO orbital energies (Hartree)
+static double g_mo_coeff[MAX_BASIS][MAX_BASIS]; // MO coefficient matrix C (AO → MO)
+static double g_mulliken_q[MAX_ATOM];           // Mulliken net atomic charges
 static double g_E_kin = 0.0;  // Electronic kinetic energy component T (Hartree)
 static double g_E_vne = 0.0;  // Nuclear-electron attraction energy V_ne (Hartree)
 static double g_E_vee = 0.0;  // Electron-electron repulsion energy V_ee (Hartree)
@@ -139,6 +139,7 @@ static int show_orbital    = 0; // 1 = show molecular orbital diagram (key O)
 static int show_mulliken   = 0; // 1 = show Mulliken population panel (key M)
 static int show_energy_dec = 0; // 1 = show energy decomposition panel (key E)
 static int show_forces     = 0; // 1 = draw force arrows on atoms (key F)
+static int show_volume     = 0; // 1 = render 3D semi-transparent orbital cloud (key V)
 
 // Mutex protecting all render-side copies above
 static pthread_mutex_t render_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -459,7 +460,7 @@ double compute_hf_energy(const double R_atom_in[MAX_ATOM][3],
     if (do_analysis) {
         g_nb=NB; g_occ=occ; // Store basis size and occupancy for the panels
 
-        // Copy orbital energies and MO coefficients for panel O
+        // Copy orbital energies and MO coefficients for panel O and volume renderer
         for (int i=0;i<NB;i++) {
             g_orbital_eps[i]=eps_final[i];
             for (int j=0;j<NB;j++) g_mo_coeff[i][j]=C_final[i][j];
@@ -740,6 +741,114 @@ void drawForceArrow(float x,float y,float z,float fx,float fy,float fz) {
     gluCylinder(q,0.09f,0.0f,0.22f,12,1); // Cone: base radius 0.09, apex at top
     gluDeleteQuadric(q); glPopMatrix();
     glEnable(GL_LIGHTING); // Re-enable lighting for subsequent geometry
+}
+
+// ====================== ORBITAL VOLUME RENDERER (KEY V) ======================
+// Renders all occupied molecular orbitals as semi-transparent 3D point clouds
+// directly in the 3D viewport alongside the atoms.
+//
+// Algorithm:
+//   1. Build a 20×20×20 regular grid centred on the molecule.
+//   2. At every grid point r, evaluate ψ_k(r) = Σ_A C[A][k] · χ_A(r)
+//      where χ_A is the contracted STO-3G s-type Gaussian centred on atom A.
+//   3. Colour each point by the sign of ψ (positive lobe = cool, negative = warm)
+//      and set alpha proportional to |ψ|² so dense regions appear more opaque.
+//   4. Depth writes are disabled (glDepthMask GL_FALSE) so the cloud never
+//      occludes the atom spheres that were already written to the depth buffer.
+//
+// Cost: 20³ × occ × nb × NP  evaluations of exp() per frame.
+//   H₂ (occ=1, nb=2, NP=3): ≈ 24 000 exp() calls — negligible.
+//   6 occ MOs, 12 atoms    : ≈ 1.7 M exp() calls — still real-time on modern HW.
+void drawOrbitalVolume() {
+    int nb  = nb_r;   // Number of contracted basis functions (one per atom)
+    int occ = occ_r;  // Number of doubly-occupied molecular orbitals
+    if (nb < 1 || occ < 1) return; // Guard: no SCF data available yet
+
+    // Compute the geometric centroid of the molecule from render-side atom positions
+    float cx=0.0f, cy=0.0f, cz=0.0f;
+    for (int i=0; i<nb; i++) {
+        cx += atoms_r[i].x; // Accumulate x coordinate of atom i
+        cy += atoms_r[i].y; // Accumulate y coordinate of atom i
+        cz += atoms_r[i].z; // Accumulate z coordinate of atom i
+    }
+    cx/=nb; cy/=nb; cz/=nb; // Divide by atom count to obtain centroid
+
+    // Grid parameters: 20×20×20 = 8 000 sample points per frame
+    const int   NG   = 20;    // Number of grid points per Cartesian dimension
+    const float GEXT = 2.8f;  // Half-extent of the evaluation grid in bohr (grid spans ±GEXT)
+    float step = 2.0f*GEXT/(NG-1); // Uniform spacing between adjacent grid points (bohr)
+
+    // Per-MO colour palette: [pos_R, pos_G, pos_B, neg_R, neg_G, neg_B]
+    // Positive lobe (ψ > 0) → cool colours; negative lobe (ψ < 0) → warm colours
+    static const float mo_col[6][6] = {
+        {0.20f,0.45f,1.00f,  1.00f,0.25f,0.20f}, // MO 1: blue / red
+        {0.20f,0.90f,0.30f,  1.00f,0.65f,0.10f}, // MO 2: green / orange
+        {0.10f,0.85f,0.95f,  0.90f,0.20f,0.90f}, // MO 3: cyan / magenta
+        {1.00f,0.95f,0.20f,  0.60f,0.20f,0.90f}, // MO 4: yellow / purple
+        {1.00f,1.00f,1.00f,  0.50f,0.50f,0.55f}, // MO 5: white / grey
+        {0.20f,0.85f,0.75f,  1.00f,0.45f,0.65f}, // MO 6: teal / pink
+    };
+
+    glDisable(GL_LIGHTING);                        // Cloud is self-coloured, not lit by the scene light
+    glEnable(GL_BLEND);                            // Enable alpha-blending for translucency
+    glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA); // Standard over-compositing blend equation
+    glDepthMask(GL_FALSE);                         // Disable depth writes so cloud never occludes atoms
+    glPointSize(6.0f);                             // Larger point sprites give a smoother cloud look
+
+    glBegin(GL_POINTS); // Batch all cloud vertices in a single draw call for efficiency
+
+    for (int ix=0; ix<NG; ix++) {
+        float rx = cx + (-GEXT + ix*step); // X coordinate of this grid point (world space)
+        for (int iy=0; iy<NG; iy++) {
+            float ry = cy + (-GEXT + iy*step); // Y coordinate of this grid point
+            for (int iz=0; iz<NG; iz++) {
+                float rz = cz + (-GEXT + iz*step); // Z coordinate of this grid point
+
+                // Evaluate every occupied MO at this single grid point
+                for (int k=0; k<occ; k++) {
+
+                    // ψ_k(r) = Σ_A C[A][k] · χ_A(r)
+                    double psi = 0.0; // Accumulated MO amplitude at grid point r
+                    for (int A=0; A<nb; A++) {
+                        double cAk = mo_coeff_r[A][k]; // MO coefficient: AO A contributes to MO k
+                        // Displacement vector from nucleus A to the current grid point
+                        double dxA = rx - atoms_r[A].x;
+                        double dyA = ry - atoms_r[A].y;
+                        double dzA = rz - atoms_r[A].z;
+                        double r2A = dxA*dxA + dyA*dyA + dzA*dzA; // |r − R_A|² (squared distance)
+                        // χ_A(r) = Σ_p d_p · N(α_p) · exp(−α_p · |r−R_A|²)   (contracted STO-3G)
+                        double chi = 0.0;
+                        for (int p=0; p<NP; p++) {
+                            double alp = g_a_exp[A][p]; // STO-3G exponent for atom A, primitive p
+                            // Primitive Gaussian contribution: contraction coeff × norm × Gaussian
+                            chi += STO3G_d[p] * norm_gauss(alp) * exp(-alp*r2A);
+                        }
+                        psi += cAk * chi; // Accumulate AO contribution: ψ += C_Ak · χ_A
+                    }
+
+                    float psi2 = (float)(psi*psi); // Electron probability density: ρ = |ψ|²
+                    if (psi2 < 4e-4f) continue;    // Skip negligible-density regions (reduce clutter)
+
+                    // Alpha proportional to density, hard-capped at 0.38 to stay translucent
+                    float alpha = (psi2*14.0f < 0.38f) ? psi2*14.0f : 0.38f;
+
+                    // Select colour pair for this MO (cycle table if occ > 6)
+                    int ci = k % 6;
+                    if (psi > 0.0)
+                        glColor4f(mo_col[ci][0],mo_col[ci][1],mo_col[ci][2],alpha); // Positive lobe
+                    else
+                        glColor4f(mo_col[ci][3],mo_col[ci][4],mo_col[ci][5],alpha); // Negative lobe
+
+                    glVertex3f(rx, ry, rz); // Emit coloured point into the GL_POINTS batch
+                }
+            }
+        }
+    }
+
+    glEnd();              // Flush all GL_POINTS geometry to the GPU
+    glPointSize(1.0f);    // Restore default point size for subsequent geometry
+    glDepthMask(GL_TRUE); // Re-enable depth writes so opaque geometry renders correctly
+    glEnable(GL_LIGHTING); // Restore Phong lighting for atom spheres and bond cylinders
 }
 
 // ====================== PANEL O: ORBITAL DIAGRAM ======================
@@ -1036,25 +1145,32 @@ void drawHUD() {
     drawText(-2.9f,-2.34f,"Integrator: Velocity Verlet",GLUT_BITMAP_HELVETICA_10);
     drawText(-2.9f,-2.49f,"Thermostat: Langevin  |  Barostat: Berendsen",GLUT_BITMAP_HELVETICA_10);
     glColor3f(0.38f,0.38f,0.48f);
-    drawText(-2.9f,-2.68f,"W/S: zoom   A/D: pan   Z/X: up/down   +/-: temperature",GLUT_BITMAP_HELVETICA_10);
+    // Updated controls hint now includes V for orbital volume toggle
+    drawText(-2.9f,-2.68f,"W/S:zoom  A/D:pan  Z/X:up/dn  +/-:temp  V:vol.orb",GLUT_BITMAP_HELVETICA_10);
 
-    // Panel toggle key hints at the bottom
-    float kx=-2.9f,ky=-2.82f,ksp=0.62f;
-    const char *key_labels[4]={"[O] Orbitals","[M] Mulliken","[E] Energy","[F] Forces"};
-    int  *key_flags[4]={&show_orbital,&show_mulliken,&show_energy_dec,&show_forces};
-    float key_colors[4][3]={{0.3f,0.85f,1.0f},{0.25f,1.0f,0.5f},{0.75f,0.4f,1.0f},{1.0f,0.25f,0.25f}};
-    for (int i=0;i<4;i++){
-        if (*key_flags[i]) glColor3f(key_colors[i][0],key_colors[i][1],key_colors[i][2]); // Highlight if active
-        else glColor3f(0.3f,0.3f,0.38f); // Dim if inactive
+    // Panel toggle key indicators at the bottom — now 5 buttons (O M E F V)
+    float kx=-2.9f, ky=-2.82f, ksp=0.50f; // Slightly tighter spacing to fit the extra V button
+    const char *key_labels[5]={"[O] Orbitals","[M] Mulliken","[E] Energy","[F] Forces","[V] Vol.Orb"};
+    int  *key_flags[5]={&show_orbital,&show_mulliken,&show_energy_dec,&show_forces,&show_volume};
+    float key_colors[5][3]={
+        {0.3f,0.85f,1.0f},  // Cyan for orbital diagram (O)
+        {0.25f,1.0f,0.5f},  // Green for Mulliken panel (M)
+        {0.75f,0.4f,1.0f},  // Purple for energy panel (E)
+        {1.0f,0.25f,0.25f}, // Red for force arrows (F)
+        {0.8f,0.7f,1.0f}    // Lavender for orbital volume cloud (V)
+    };
+    for (int i=0;i<5;i++){
+        if (*key_flags[i]) glColor3f(key_colors[i][0],key_colors[i][1],key_colors[i][2]); // Bright when active
+        else glColor3f(0.3f,0.3f,0.38f); // Dim grey when inactive
         drawText(kx+ksp*i,ky,key_labels[i],GLUT_BITMAP_HELVETICA_10);
     }
 
     drawEnergyGraph(-2.9f,-1.35f); // Always-visible energy history plot
 
     // Conditionally draw educational panels based on toggle flags
-    if (show_orbital)    drawOrbitalDiagram();
-    if (show_mulliken)   drawMulliken();
-    if (show_energy_dec) drawEnergyDecomp();
+    if (show_orbital)    drawOrbitalDiagram(); // Panel O: MO energy level diagram
+    if (show_mulliken)   drawMulliken();        // Panel M: Mulliken charge analysis
+    if (show_energy_dec) drawEnergyDecomp();    // Panel E: four-component energy breakdown
 
     // Restore 3D rendering state
     glEnable(GL_DEPTH_TEST); glEnable(GL_LIGHTING);
@@ -1103,19 +1219,24 @@ void display(void) {
         drawForceArrow(snap[i].x,snap[i].y,snap[i].z,fx,fy,fz);
     }
 
-    // ---- Draw atoms as shaded spheres ----
+    // ---- Draw atoms as shaded spheres (opaque — written to depth buffer) ----
     glEnable(GL_LIGHTING);
     for (int i=0;i<NUM_ATOMS;i++){
         if (g_Z[i]==2) glColor3f(0.95f,0.90f,0.35f); // He: warm yellow
         else           glColor3f(0.82f,0.82f,0.95f);  // H: pale blue-white
         glPushMatrix();
-        glTranslatef(snap[i].x,snap[i].y,snap[i].z);          // Move to atom position
-        glutSolidSphere(snap[i].radius,slices,stacks);          // Draw sphere
+        glTranslatef(snap[i].x,snap[i].y,snap[i].z);  // Move to atom position
+        glutSolidSphere(snap[i].radius,slices,stacks); // Draw sphere (writes depth)
         glPopMatrix();
     }
 
-    drawHUD();          // Draw 2D overlay on top of the 3D scene
-    glutSwapBuffers();  // Present the rendered frame (double buffering)
+    // ---- Panel V: 3D orbital volume cloud (rendered AFTER atoms so depth test works) ----
+    // Atoms are already in the depth buffer; the cloud tests against them but never overwrites,
+    // so orbital lobes appear around the nuclei without obscuring them.
+    if (show_volume) drawOrbitalVolume();
+
+    drawHUD();         // Draw 2D overlay on top of the 3D scene
+    glutSwapBuffers(); // Present the rendered frame (double buffering)
 }
 
 // Idle callback: continuously request redraws to keep the display updated
@@ -1281,6 +1402,7 @@ void key(unsigned char k,int x,int y){
         case 'm': case 'M': show_mulliken=!show_mulliken; printf("[M] Mulliken: %s\n",show_mulliken?"ON":"OFF"); break;
         case 'e': case 'E': show_energy_dec=!show_energy_dec; printf("[E] Energy: %s\n",show_energy_dec?"ON":"OFF"); break;
         case 'f': case 'F': show_forces=!show_forces; printf("[F] Forces: %s\n",show_forces?"ON":"OFF"); break;
+        case 'v': case 'V': show_volume=!show_volume; printf("[V] Orbital Volume: %s\n",show_volume?"ON":"OFF"); break; // Toggle 3D orbital cloud rendering
         case 27: exit(0); // ESC key: exit the application
     }
     glutPostRedisplay(); // Request a redraw after any key press
@@ -1422,7 +1544,7 @@ int main(int argc, char **argv) {
 
     // Print simulation header
     printf("================================================\n");
-    printf("  AIMD — Hartree-Fock / STO-3G  (v1.3)\n");
+    printf("  AIMD — Hartree-Fock / STO-3G  (v1.1)\n");
     if      (molecule_type == 1)
         printf("  %d x HeH+  |  %d atoms  |  %d electrons  |  charge +%d\n",
                N_heh_pairs, NUM_ATOMS, NUM_ELECTRONS, N_heh_pairs);
@@ -1430,7 +1552,7 @@ int main(int argc, char **argv) {
         printf("  %d He atom(s)  |  %d electrons  |  neutral\n", NUM_ATOMS, NUM_ELECTRONS);
     else
         printf("  %d H atom(s)  |  %d electrons\n", NUM_ATOMS, NUM_ELECTRONS);
-    printf("  Panels: O=Orbitals  M=Mulliken  E=Energy  F=Forces\n");
+    printf("  Panels: O=Orbitals  M=Mulliken  E=Energy  F=Forces  V=Vol.Orb\n");
     printf("  dt = %.4f a.u. = %.6f fs\n", dt, dt*0.02418884f); // Print time step in both unit systems
     printf("================================================\n");
 
@@ -1458,11 +1580,11 @@ int main(int argc, char **argv) {
     // Build a descriptive window title based on the molecule type
     char title[256];
     if (molecule_type == 1)
-        sprintf(title,"Ab initio MD  -  HF/STO-3G  |  %dx HeH+  |  O M E F = Panels", N_heh_pairs);
+        sprintf(title,"Ab initio MD  -  HF/STO-3G  |  %dx HeH+  |  O M E F V = Panels", N_heh_pairs);
     else if (molecule_type == 2)
-        sprintf(title,"Ab initio MD  -  HF/STO-3G  |  %d He  |  O M E F = Panels", NUM_ATOMS);
+        sprintf(title,"Ab initio MD  -  HF/STO-3G  |  %d He  |  O M E F V = Panels", NUM_ATOMS);
     else
-        sprintf(title,"Ab initio MD  -  HF/STO-3G  |  %dH  |  O M E F = Panels", NUM_ATOMS);
+        sprintf(title,"Ab initio MD  -  HF/STO-3G  |  %dH  |  O M E F V = Panels", NUM_ATOMS);
     glutCreateWindow(title);
 
     // Register GLUT callbacks
