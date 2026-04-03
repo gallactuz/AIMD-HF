@@ -857,7 +857,7 @@ void drawOrbitalDiagram() {
     int n=nb_r; if (n<1) return; // Nothing to draw if no basis functions
 
     // Panel geometry: bottom-left corner and dimensions
-    float x0=0.62f, y0=-2.95f, gw=1.05f, gh=2.75f;
+    float x0=1.12f, y0=-2.95f, gw=1.05f, gh=2.75f;
 
     // Draw dark background panel
     glColor4f(0.02f,0.06f,0.18f,0.93f);
@@ -921,7 +921,7 @@ void drawOrbitalDiagram() {
 // ====================== PANEL M: MULLIKEN ======================
 // Draws the Mulliken population analysis panel (toggled with key M).
 void drawMulliken() {
-    float x0=-2.95f, y0=0.92f, gw=1.5f, rowh=0.28f;
+    float x0=-2.95f, y0=0.72f, gw=1.5f, rowh=0.28f;
     float gh=0.38f+rowh*(NUM_ATOMS+1); // Panel height scales with number of atoms
 
     // Background panel
@@ -975,7 +975,7 @@ void drawMulliken() {
 // ====================== PANEL E: ENERGY DECOMPOSITION ======================
 // Draws the energy decomposition panel breaking E_total into T, V_ne, V_ee, V_nn (key E).
 void drawEnergyDecomp() {
-    float x0=-2.95f,y0=-0.60f,gw=1.82f,gh=1.35f;
+    float x0=-2.95f,y0=-0.80f,gw=1.82f,gh=1.35f;
 
     // Background panel
     glColor4f(0.08f,0.03f,0.15f,0.92f);
@@ -1165,7 +1165,7 @@ void drawHUD() {
         drawText(kx+ksp*i,ky,key_labels[i],GLUT_BITMAP_HELVETICA_10);
     }
 
-    drawEnergyGraph(-2.9f,-1.35f); // Always-visible energy history plot
+    drawEnergyGraph(-2.9f,-1.55f); // Always-visible energy history plot
 
     // Conditionally draw educational panels based on toggle flags
     if (show_orbital)    drawOrbitalDiagram(); // Panel O: MO energy level diagram
