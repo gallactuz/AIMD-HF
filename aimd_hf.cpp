@@ -774,8 +774,8 @@ void drawOrbitalVolume() {
     cx/=nb; cy/=nb; cz/=nb; // Divide by atom count to obtain centroid
 
     // Grid parameters: 20×20×20 = 8 000 sample points per frame
-    const int   NG   = 20;    // Number of grid points per Cartesian dimension
-    const float GEXT = 2.8f;  // Half-extent of the evaluation grid in bohr (grid spans ±GEXT)
+    const int   NG   = 50;    // Number of grid points per Cartesian dimension
+    const float GEXT = 10.0f;  // Half-extent of the evaluation grid in bohr (grid spans ±GEXT)
     float step = 2.0f*GEXT/(NG-1); // Uniform spacing between adjacent grid points (bohr)
 
     // Per-MO colour palette: [pos_R, pos_G, pos_B, neg_R, neg_G, neg_B]
