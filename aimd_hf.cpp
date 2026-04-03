@@ -921,7 +921,7 @@ void drawOrbitalDiagram() {
 // ====================== PANEL M: MULLIKEN ======================
 // Draws the Mulliken population analysis panel (toggled with key M).
 void drawMulliken() {
-    float x0=-2.95f, y0=0.22f, gw=1.5f, rowh=0.28f;
+    float x0=-2.95f, y0=0.92f, gw=1.5f, rowh=0.28f;
     float gh=0.38f+rowh*(NUM_ATOMS+1); // Panel height scales with number of atoms
 
     // Background panel
@@ -975,7 +975,7 @@ void drawMulliken() {
 // ====================== PANEL E: ENERGY DECOMPOSITION ======================
 // Draws the energy decomposition panel breaking E_total into T, V_ne, V_ee, V_nn (key E).
 void drawEnergyDecomp() {
-    float x0=-2.95f,y0=-1.58f,gw=1.82f,gh=1.35f;
+    float x0=-2.95f,y0=-0.60f,gw=1.82f,gh=1.35f;
 
     // Background panel
     glColor4f(0.08f,0.03f,0.15f,0.92f);
