@@ -48,7 +48,7 @@
 int NUM_ATOMS     = 2;    // Total number of atoms in the simulation (updated from CLI)
 int NUM_ELECTRONS = 2;    // Total number of electrons (must be even for closed-shell RHF)
 #define dt            2.0f   // MD time step in atomic units (1 a.u. ≈ 0.02419 fs)
-#define BOND_CUTOFF   2.5f   // Distance threshold (bohr) below which a bond cylinder is drawn
+#define BOND_CUTOFF   2.0f   // Distance threshold (bohr) below which a bond cylinder is drawn
 
 #define MAX_ATOM      12              // Maximum number of atoms supported
 #define NP            3               // Number of Gaussian primitives per STO-3G basis function
