@@ -857,7 +857,7 @@ void drawOrbitalDiagram() {
     int n=nb_r; if (n<1) return; // Nothing to draw if no basis functions
 
     // Panel geometry: bottom-left corner and dimensions
-    float x0=1.12f, y0=-2.95f, gw=1.05f, gh=2.75f;
+    float x0=1.52f, y0=-2.95f, gw=1.05f, gh=2.75f;
 
     // Draw dark background panel
     glColor4f(0.02f,0.06f,0.18f,0.93f);
@@ -1100,14 +1100,14 @@ void drawHUD() {
 
     // Subtitle: system info
     glColor3f(0.5f,0.5f,0.62f);
-    sprintf(buf,"System: %s | %d electrons | STO-3G | Velocity Verlet + Langevin", sys_name, NUM_ELECTRONS);
+    sprintf(buf,"System: %s | %d electrons ", sys_name, NUM_ELECTRONS);
     drawText(-2.9f,2.47f,buf,GLUT_BITMAP_HELVETICA_12);
 
     // SCF computing indicator
     if (computing){glColor3f(1.0f,0.5f,0.0f); drawText(-2.9f,2.22f,"[ COMPUTING SCF... ]",GLUT_BITMAP_HELVETICA_12);}
 
     // Right-side status readouts
-    float px=1.12f,py=2.72f,dy=0.27f;
+    float px=1.52f,py=2.72f,dy=0.27f;
     glColor3f(1.0f,0.85f,0.0f); sprintf(buf,"Step    : %d",step_r); drawText(px,py,buf,GLUT_BITMAP_HELVETICA_12);
     glColor3f(0.78f,0.78f,0.84f); sprintf(buf,"Time    : %.4f fs",step_r*dt*0.02418884f); drawText(px,py-dy,buf,GLUT_BITMAP_HELVETICA_12);
     glColor3f(0.2f,1.0f,0.5f); sprintf(buf,"E(HF)   : %+.6f Ha",E_r); drawText(px,py-2*dy,buf,GLUT_BITMAP_HELVETICA_12);
